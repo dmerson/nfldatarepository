@@ -45,15 +45,18 @@ load_nfl_games <- function(seasons = 1999:2025, use_cache = TRUE) {
 # Convert the one-row-per-game format into two-rows-per-game
 # (one from each team's perspective). This makes per-team stats trivial to compute.
 games_to_team_rows <- function(games) {
-  # Away team's view of each game
+  # Away team's view of each game.
+  # venue_type: "away" for true road games, "neutral" for neutral-site games
+  # (Super Bowls, international games). Neither team is truly "home" at neutral sites.
   away <- games %>%
     transmute(
       game_id, season, week, game_type, gameday, stadium, overtime, div_game,
-      team      = away_team,
-      opponent  = home_team,
+      team       = away_team,
+      opponent   = home_team,
       team_score = away_score,
       opp_score  = home_score,
       home_away  = "away",
+      venue_type = ifelse(location == "neutral", "neutral", "away"),
       point_diff = away_score - home_score,
       result = case_when(
         away_score > home_score ~ "W",
@@ -62,15 +65,17 @@ games_to_team_rows <- function(games) {
       )
     )
 
-  # Home team's view of each game
+  # Home team's view of each game.
+  # venue_type: "home" for true home games, "neutral" for neutral-site games
   home <- games %>%
     transmute(
       game_id, season, week, game_type, gameday, stadium, overtime, div_game,
-      team      = home_team,
-      opponent  = away_team,
+      team       = home_team,
+      opponent   = away_team,
       team_score = home_score,
       opp_score  = away_score,
       home_away  = "home",
+      venue_type = ifelse(location == "neutral", "neutral", "home"),
       point_diff = home_score - away_score,
       result = case_when(
         home_score > away_score ~ "W",

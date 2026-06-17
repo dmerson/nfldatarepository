@@ -98,7 +98,40 @@ ui <- page_navbar(
     )
   ),
 
-  # ── Tab 2: Season Breakdown ───────────────────────────────────────────────
+  # ── Tab 2: Home Field Advantage ───────────────────────────────────────────
+  nav_panel(
+    title = "Home Field Advantage",
+    layout_sidebar(
+      sidebar = sidebar(
+        season_range_ui("hfa"),
+        hr(),
+        game_type_ui("hfa"),
+        hr(),
+        helpText(
+          tags$b("HFA Win%"), "= Home Win% − Away+Neutral Win%",
+          tags$br(), tags$br(),
+          tags$b("HFA Avg PM"), "= Home Avg Point Diff − Away+Neutral Avg Point Diff",
+          tags$br(), tags$br(),
+          "Neutral-site games (Super Bowls, international games) are tallied",
+          "separately and excluded from the HFA calculation."
+        )
+      ),
+      layout_columns(
+        col_widths = 12,
+        # Sortable by HFA Win% or HFA Avg PM to rank teams
+        card(
+          card_header("Home vs Away+Neutral — sorted by HFA Win%"),
+          DTOutput("hfa_winpct_table")
+        ),
+        card(
+          card_header("Home vs Away+Neutral — sorted by HFA Avg Point Margin"),
+          DTOutput("hfa_pm_table")
+        )
+      )
+    )
+  ),
+
+  # ── Tab 3: Season Breakdown ───────────────────────────────────────────────
   nav_panel(
     title = "Season Breakdown",
     layout_sidebar(
@@ -324,7 +357,41 @@ server <- function(input, output, session) {
                   caption = "All-Time Team Records (1999–2024)")
   })
 
-  # ── Tab 2: Season Breakdown ───────────────────────────────────────────────
+  # ── Tab 2: Home Field Advantage ───────────────────────────────────────────
+  hfa_data <- reactive({
+    calc_home_field_advantage(
+      team_rows,
+      season_min = input$hfa_season_range[1],
+      season_max = input$hfa_season_range[2],
+      game_types = input$hfa_game_types
+    )
+  })
+
+  # Table sorted by HFA Win%
+  output$hfa_winpct_table <- renderDT({
+    data <- hfa_data() %>%
+      select(Team, team,
+             Home_G, Home_W, Home_L, Home_T, Home_Win_Pct, Home_Avg_PM,
+             Away_G, Away_W, Away_L, Away_T, Away_Win_Pct, Away_Avg_PM,
+             Neut_G, HFA_Win_Pct, HFA_Avg_PM) %>%
+      rename(Abbr = team) %>%
+      arrange(desc(HFA_Win_Pct))
+    nfl_datatable(data, caption = "Home Field Advantage — ranked by HFA Win%")
+  })
+
+  # Table sorted by HFA Avg PM
+  output$hfa_pm_table <- renderDT({
+    data <- hfa_data() %>%
+      select(Team, team,
+             Home_G, Home_W, Home_L, Home_T, Home_Win_Pct, Home_Avg_PM,
+             Away_G, Away_W, Away_L, Away_T, Away_Win_Pct, Away_Avg_PM,
+             Neut_G, HFA_Win_Pct, HFA_Avg_PM) %>%
+      rename(Abbr = team) %>%
+      arrange(desc(HFA_Avg_PM))
+    nfl_datatable(data, caption = "Home Field Advantage — ranked by HFA Avg Point Margin")
+  })
+
+  # ── Tab 3: Season Breakdown ───────────────────────────────────────────────
   season_data <- reactive({
     calc_full_summary(
       team_rows,

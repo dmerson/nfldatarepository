@@ -141,7 +141,58 @@ calc_full_summary <- function(team_rows,
 }
 
 # ─────────────────────────────────────────────────────────────
-# 5. Head-to-head game log between two specific teams
+# 5. Home field advantage
+#    Splits each team's record and avg point differential into
+#    true home games vs away+neutral games, then computes the difference.
+#    venue_type column must exist in team_rows (added in data_load.R).
+# ─────────────────────────────────────────────────────────────
+calc_home_field_advantage <- function(team_rows,
+                                      season_min = NULL, season_max = NULL,
+                                      game_types = c("REG", "WC", "DIV", "CON", "SB")) {
+
+  data <- filter_games(team_rows, season_min, season_max, game_types)
+
+  # Helper: summarise W-L-T, Win%, and Avg PM for a filtered slice
+  summarise_slice <- function(df, prefix) {
+    df %>%
+      group_by(team) %>%
+      summarise(
+        G      = n(),
+        W      = sum(result == "W"),
+        L      = sum(result == "L"),
+        T      = sum(result == "T"),
+        Win_Pct = round((W + 0.5 * T) / G, 3),
+        Avg_PM  = round(mean(point_diff), 2),
+        .groups = "drop"
+      ) %>%
+      rename_with(~ paste0(prefix, "_", .), -team)
+  }
+
+  home_stats    <- summarise_slice(data %>% filter(venue_type == "home"),    "Home")
+  away_stats    <- summarise_slice(data %>% filter(venue_type != "home"),    "Away")  # away + neutral
+  neutral_stats <- summarise_slice(data %>% filter(venue_type == "neutral"), "Neut")
+
+  home_stats %>%
+    left_join(away_stats,    by = "team") %>%
+    left_join(neutral_stats, by = "team") %>%
+    mutate(
+      # Home field advantage = home minus away+neutral
+      HFA_Win_Pct = round(Home_Win_Pct - Away_Win_Pct, 3),
+      HFA_Avg_PM  = round(Home_Avg_PM  - Away_Avg_PM,  2),
+      Team        = sapply(team, get_team_name)
+    ) %>%
+    select(
+      Team, team,
+      Home_G, Home_W, Home_L, Home_T, Home_Win_Pct, Home_Avg_PM,
+      Away_G, Away_W, Away_L, Away_T, Away_Win_Pct, Away_Avg_PM,
+      Neut_G, Neut_W, Neut_L, Neut_T, Neut_Win_Pct, Neut_Avg_PM,
+      HFA_Win_Pct, HFA_Avg_PM
+    ) %>%
+    arrange(desc(HFA_Win_Pct))
+}
+
+# ─────────────────────────────────────────────────────────────
+# 6. Head-to-head game log between two specific teams
 # ─────────────────────────────────────────────────────────────
 calc_head_to_head <- function(team_rows, team_a, team_b,
                               season_min = NULL, season_max = NULL,

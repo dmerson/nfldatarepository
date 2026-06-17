@@ -1,6 +1,6 @@
 # NFL Data Analysis
 
-An interactive R Shiny app for exploring NFL team performance from 1999 through 2025. Browse all-time records, season-by-season breakdowns, head-to-head history, team trends, and regression analyses that test how well prior-year performance and schedule difficulty predict future win percentage.
+An interactive R Shiny app for exploring NFL team performance from 1999 through 2025. Browse all-time records, season-by-season breakdowns, head-to-head history, team trends, home field advantage rankings, and regression analyses that test how well prior-year performance and schedule difficulty predict future win percentage.
 
 **Live app:** https://dmerson.shinyapps.io/nfldataanalysis/
 
@@ -53,6 +53,28 @@ A sortable, filterable table of every franchise's cumulative stats across any se
 | Opp Win% | Combined win% of all opponents faced — a raw schedule-strength measure |
 
 Filters: season range slider, game type checkboxes (regular season, wild card, divisional, conference championship, Super Bowl). Data is downloadable as CSV or Excel.
+
+---
+
+### Home Field Advantage
+Ranks every franchise by how much better they perform at home versus on the road. Two tables are shown — one sorted by HFA Win%, one by HFA Avg Point Margin — so you can compare whether both metrics agree on who has the strongest home field.
+
+Games are split into three buckets:
+
+| Bucket | Definition |
+|--------|-----------|
+| **Home** | True home games only |
+| **Away** | Road games |
+| **Neutral** | Neutral-site games (Super Bowls, international games) — tallied separately and excluded from the HFA calculation since neither team has a home advantage |
+
+**HFA columns:**
+
+| Column | Description |
+|--------|-------------|
+| `HFA_Win_Pct` | Home Win% − Away Win% |
+| `HFA_Avg_PM` | Home Avg Point Margin − Away Avg Point Margin |
+
+Filters: season range slider, game type checkboxes.
 
 ---
 
@@ -130,11 +152,12 @@ nfldataanalysis/
 │   │                       # (one per team perspective)
 │   │
 │   ├── stats_calc.R        # All statistics functions:
-│   │                       #   calc_records()              — W-L-T, Win%, points
-│   │                       #   calc_sos_adjusted_pm()      — SOS Adj PM
-│   │                       #   calc_opponent_record()      — opponent W-L-T
-│   │                       #   calc_full_summary()         — all three joined
-│   │                       #   calc_head_to_head()         — game log for two teams
+│   │                       #   calc_records()                — W-L-T, Win%, points
+│   │                       #   calc_sos_adjusted_pm()        — SOS Adj PM
+│   │                       #   calc_opponent_record()        — opponent W-L-T
+│   │                       #   calc_full_summary()           — all three joined
+│   │                       #   calc_home_field_advantage()   — home/away/neutral splits + HFA
+│   │                       #   calc_head_to_head()           — game log for two teams
 │   │
 │   ├── regression.R        # All regression functions:
 │   │                       #   compute_season_metric()         — Win% or SOS Adj PM per team-season

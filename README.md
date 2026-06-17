@@ -57,7 +57,7 @@ Filters: season range slider, game type checkboxes (regular season, wild card, d
 ---
 
 ### Home Field Advantage
-Ranks every franchise by how much better they perform at home versus on the road. Two tables are shown — one sorted by HFA Win%, one by HFA Avg Point Margin — so you can compare whether both metrics agree on who has the strongest home field.
+Ranks every franchise by how much better they perform at home versus on the road, with an interactive map and a full stats table.
 
 Games are split into three buckets:
 
@@ -73,6 +73,17 @@ Games are split into three buckets:
 |--------|-------------|
 | `HFA_Win_Pct` | Home Win% − Away Win% |
 | `HFA_Avg_PM` | Home Avg Point Margin − Away Avg Point Margin |
+
+**Map** — an interactive leaflet map plots every franchise at their current stadium:
+- **Circle size** — proportional to the magnitude of `HFA_Avg_PM`; larger = stronger effect in either direction
+- **Green** — positive HFA (team performs better at home)
+- **Red** — negative HFA (team performs better on the road)
+- **Hover** — shows team name and HFA score
+- **Click** — popup with full home/away split (W-L-T, Win%, Avg PM)
+
+Note: LAC and LAR share SoFi Stadium, and NYG and NYJ share MetLife Stadium. Both pairs are offset slightly on the map so their circles remain distinct.
+
+**Table** — full home/away/neutral breakdown for every team, sortable by any column and downloadable as CSV or Excel.
 
 Filters: season range slider, game type checkboxes.
 
@@ -170,7 +181,8 @@ nfldataanalysis/
 │   │                       #   plot_partial_regression()       — partial regression plots
 │   │
 │   └── team_mappings.R     # Handles relocated franchises (OAK→LV, SD→LAC, STL→LAR);
-│                           # maps abbreviations to full team names
+│                           # maps abbreviations to full team names;
+│                           # STADIUM_COORDS — lat/lon for all 32 current stadiums
 │
 └── data/                   # Auto-created at runtime; holds the cached RDS file
                             # (excluded from git via .gitignore)

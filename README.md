@@ -1,6 +1,6 @@
 # NFL Data Analysis
 
-An interactive R Shiny app for exploring NFL team performance from 1999 through 2025. Browse all-time records, season-by-season breakdowns, head-to-head history, team trends, and regression analyses that test whether prior-year opponent quality predicts future win percentage.
+An interactive R Shiny app for exploring NFL team performance from 1999 through 2025. Browse all-time records, season-by-season breakdowns, head-to-head history, team trends, and regression analyses that test how well prior-year performance and schedule difficulty predict future win percentage.
 
 **Live app:** https://dmerson.shinyapps.io/nfldataanalysis/
 
@@ -75,7 +75,7 @@ Drill into one franchise across any season range:
 ---
 
 ### Regression
-Tests whether a team's upcoming schedule difficulty — measured by how their future opponents performed *last* year — predicts their win percentage in the coming season.
+Tests whether a team's upcoming schedule difficulty — measured by how their future opponents performed *last* year — predicts their win percentage in the coming season. Uses a single predictor.
 
 **How the predictive score is built:**
 1. For team T in season A, look at every opponent on T's season A+1 schedule.
@@ -93,6 +93,29 @@ The tab displays R², adjusted R², slope, and p-value in summary boxes, a scatt
 
 ---
 
+### Multi Regression
+A two-predictor model that combines the team's own prior-year performance with a forward-looking schedule difficulty estimate.
+
+**Model:** `Win%(A+1) ~ Team Win%(A) + Avg Opp Win%(A) for A+1 schedule`
+
+| Predictor | How it's built |
+|-----------|---------------|
+| **Team Win%(A)** | Team's own win% in season A |
+| **Avg Opp Win%(A) for A+1 schedule** | For each opponent on the team's A+1 schedule, take that opponent's win% from season A, then average across the full schedule. This is a pre-season estimate of how hard next year will be. |
+| **Outcome** | Team's actual Win%(A+1) |
+
+**Visualizations:**
+
+| Panel | What it tells you |
+|-------|------------------|
+| **R² / Adj R²** | How much of next-season win% variance the two predictors jointly explain |
+| **Coefficient table** | Estimate, std error, t-stat, and p-value for each predictor |
+| **Actual vs Predicted** | Model-fitted win% (x) vs actual win% (y); the dashed diagonal is perfect prediction |
+| **Partial: Team Win%(A)** | Marginal effect of prior-year performance after controlling for schedule difficulty |
+| **Partial: Avg Opp Win%(A) for A+1 Schedule** | Marginal effect of schedule difficulty after controlling for prior-year performance |
+
+---
+
 ## File Structure
 
 ```
@@ -107,17 +130,21 @@ nfldataanalysis/
 │   │                       # (one per team perspective)
 │   │
 │   ├── stats_calc.R        # All statistics functions:
-│   │                       #   calc_records()          — W-L-T, Win%, points
-│   │                       #   calc_sos_adjusted_pm()  — SOS Adj PM
-│   │                       #   calc_opponent_record()  — opponent W-L-T
-│   │                       #   calc_full_summary()     — all three joined
-│   │                       #   calc_head_to_head()     — game log for two teams
+│   │                       #   calc_records()              — W-L-T, Win%, points
+│   │                       #   calc_sos_adjusted_pm()      — SOS Adj PM
+│   │                       #   calc_opponent_record()      — opponent W-L-T
+│   │                       #   calc_full_summary()         — all three joined
+│   │                       #   calc_head_to_head()         — game log for two teams
 │   │
-│   ├── regression.R        # Regression analysis functions:
-│   │                       #   compute_season_metric() — Win% or SOS Adj PM per team-season
-│   │                       #   build_regression_data() — constructs pred_score dataset
-│   │                       #   fit_regression()        — runs lm(), extracts R²/slope/p-value
-│   │                       #   plot_regression()       — scatter plot with regression line
+│   ├── regression.R        # All regression functions:
+│   │                       #   compute_season_metric()         — Win% or SOS Adj PM per team-season
+│   │                       #   build_regression_data()         — single-predictor dataset
+│   │                       #   fit_regression()                — lm(), R²/slope/p-value
+│   │                       #   plot_regression()               — scatter with regression line
+│   │                       #   build_multi_regression_data()   — two-predictor dataset
+│   │                       #   fit_multi_regression()          — lm(), coefficient table
+│   │                       #   plot_actual_vs_predicted()      — fitted vs actual scatter
+│   │                       #   plot_partial_regression()       — partial regression plots
 │   │
 │   └── team_mappings.R     # Handles relocated franchises (OAK→LV, SD→LAC, STL→LAR);
 │                           # maps abbreviations to full team names

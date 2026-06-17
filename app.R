@@ -201,6 +201,79 @@ ui <- page_navbar(
     )
   ),
 
+  # ── Tab 6: Multiple Regression ───────────────────────────────────────────
+  nav_panel(
+    title = "Multi Regression",
+    layout_sidebar(
+      sidebar = sidebar(
+        helpText(
+          tags$b("Model:"),
+          tags$br(),
+          "Win%(A+1) ~",
+          tags$br(),
+          tags$em("  Team Win%(A)"),
+          tags$br(),
+          tags$em("  + Avg Opponent Win%(A)"),
+          tags$br(), tags$br(),
+          tags$b("Win%(A)"), "— how good was the team last season?",
+          tags$br(), tags$br(),
+          tags$b("Avg Opp Win%(A)"), "— avg Win%(A) of every team on the",
+          "A+1 schedule. Higher = tougher schedule ahead."
+        ),
+        hr(),
+        season_range_ui("mreg", min_val = 2000),
+        hr(),
+        checkboxGroupInput(
+          inputId  = "mreg_game_types",
+          label    = "Game types",
+          choices  = c("Regular season" = "REG",
+                       "Wild Card"      = "WC",
+                       "Divisional"     = "DIV",
+                       "Conf. Champ."   = "CON",
+                       "Super Bowl"     = "SB"),
+          selected = "REG",
+          inline   = TRUE
+        )
+      ),
+      layout_columns(
+        col_widths = 12,
+        # Row 1: model fit stats
+        layout_columns(
+          col_widths = c(4, 4, 4),
+          value_box(title = "R²",     value = textOutput("mreg_r2"),     theme = "primary"),
+          value_box(title = "Adj R²", value = textOutput("mreg_adj_r2"), theme = "secondary"),
+          value_box(title = "N",      value = textOutput("mreg_n"),      theme = "info")
+        ),
+        # Row 2: coefficient table
+        card(
+          card_header("Coefficients"),
+          DTOutput("mreg_coef_table")
+        ),
+        # Row 3: actual vs predicted + partial regression plots side by side
+        layout_columns(
+          col_widths = c(4, 4, 4),
+          card(
+            card_header("Actual vs Predicted"),
+            plotOutput("mreg_actual_vs_pred", height = "340px")
+          ),
+          card(
+            card_header("Partial: Team Win%(A)"),
+            plotOutput("mreg_partial_own", height = "340px")
+          ),
+          card(
+            card_header("Partial: Avg Opp Win%(A)"),
+            plotOutput("mreg_partial_opp", height = "340px")
+          )
+        ),
+        # Row 4: full dataset
+        card(
+          card_header("Dataset"),
+          DTOutput("mreg_table")
+        )
+      )
+    )
+  ),
+
   # ── Tab 4: Team Detail ────────────────────────────────────────────────────
   nav_panel(
     title = "Team Detail",
@@ -420,6 +493,54 @@ server <- function(input, output, session) {
              `Opps w/ Data` = n_with_data,
              `Win%` = Win_Pct)
     nfl_datatable(data, caption = "Regression Dataset: one row per team-season")
+  })
+
+  # ── Tab 6: Multiple Regression ───────────────────────────────────────────
+
+  mreg_data <- reactive({
+    build_multi_regression_data(
+      team_rows,
+      game_types = input$mreg_game_types,
+      season_min = input$mreg_season_range[1],
+      season_max = input$mreg_season_range[2]
+    )
+  })
+
+  mreg_model <- reactive({
+    data <- mreg_data()
+    req(nrow(data) > 20)
+    fit_multi_regression(data)
+  })
+
+  output$mreg_r2     <- renderText({ mreg_model()$r_squared })
+  output$mreg_adj_r2 <- renderText({ mreg_model()$adj_r_squared })
+  output$mreg_n      <- renderText({ mreg_model()$n_obs })
+
+  output$mreg_coef_table <- renderDT({
+    nfl_datatable(mreg_model()$coef_table,
+                  caption = "Model coefficients — outcome: Win%(A+1)")
+  })
+
+  output$mreg_actual_vs_pred <- renderPlot({
+    plot_actual_vs_predicted(mreg_data(), mreg_model())
+  })
+
+  output$mreg_partial_own <- renderPlot({
+    plot_partial_regression(mreg_data(), mreg_model(), predictor = "own_win_pct_A")
+  })
+
+  output$mreg_partial_opp <- renderPlot({
+    plot_partial_regression(mreg_data(), mreg_model(), predictor = "avg_opp_win_pct")
+  })
+
+  output$mreg_table <- renderDT({
+    data <- mreg_data() %>%
+      rename(Abbr               = team,
+             Season             = season,
+             `Team Win%(A)`     = own_win_pct_A,
+             `Avg Opp Win%(A)`  = avg_opp_win_pct,
+             `Win%(A+1)`        = Win_Pct)
+    nfl_datatable(data, caption = "Multiple regression dataset: one row per team-season")
   })
 }
 

@@ -131,6 +131,165 @@ fit_regression <- function(reg_data) {
   )
 }
 
+# ═════════════════════════════════════════════════════════════
+# MULTIPLE REGRESSION
+# Model: Win_Pct(A+1) ~ Win_Pct(A) + Avg_Opp_Win_Pct(A+1 schedule, from season A)
+# ═════════════════════════════════════════════════════════════
+
+# Build the dataset for multiple regression.
+# Each row is one (team, season A+1) with three values:
+#   own_win_pct_A    — team's own Win% in season A (prior year performance)
+#   avg_opp_win_pct  — avg Win%(A) of every opponent on the A+1 schedule (schedule difficulty)
+#   Win_Pct          — team's actual Win% in season A+1 (outcome)
+build_multi_regression_data <- function(team_rows,
+                                        game_types = "REG",
+                                        season_min = 1999,
+                                        season_max = 2025) {
+
+  filtered <- team_rows %>%
+    filter(game_type %in% game_types,
+           season    >= season_min,
+           season    <= season_max)
+
+  # Per-season Win% for every team (used as both own predictor and opponent lookup)
+  season_winpct <- filtered %>%
+    group_by(team, season) %>%
+    summarise(
+      G        = n(),
+      W        = sum(result == "W"),
+      T        = sum(result == "T"),
+      win_pct  = (W + 0.5 * T) / G,
+      .groups  = "drop"
+    ) %>%
+    select(team, season, win_pct)
+
+  # For each game in season A+1, look up opponent's Win% from season A, then average
+  avg_opp_winpct <- filtered %>%
+    select(team, season, opponent) %>%
+    mutate(prev_season = season - 1) %>%
+    left_join(
+      season_winpct %>% rename(opp_win_pct_prev = win_pct),
+      by = c("opponent" = "team", "prev_season" = "season")
+    ) %>%
+    group_by(team, season) %>%
+    summarise(
+      avg_opp_win_pct = mean(opp_win_pct_prev, na.rm = TRUE),
+      n_with_data     = sum(!is.na(opp_win_pct_prev)),
+      .groups = "drop"
+    ) %>%
+    filter(n_with_data >= 10)
+
+  # Join own Win%(A), avg opp Win%(A), and actual Win%(A+1)
+  avg_opp_winpct %>%
+    # own Win% in season A  (season - 1 relative to A+1)
+    mutate(prev_season = season - 1) %>%
+    left_join(
+      season_winpct %>% rename(own_win_pct_A = win_pct),
+      by = c("team" = "team", "prev_season" = "season")
+    ) %>%
+    # actual Win% in season A+1
+    left_join(
+      season_winpct %>% rename(Win_Pct = win_pct),
+      by = c("team" = "team", "season" = "season")
+    ) %>%
+    filter(!is.na(own_win_pct_A), !is.na(avg_opp_win_pct), !is.na(Win_Pct)) %>%
+    mutate(
+      own_win_pct_A   = round(own_win_pct_A, 3),
+      avg_opp_win_pct = round(avg_opp_win_pct, 3),
+      Win_Pct         = round(Win_Pct, 3),
+      Team            = sapply(team, get_team_name)
+    ) %>%
+    select(Team, team, season, own_win_pct_A, avg_opp_win_pct, Win_Pct) %>%
+    arrange(team, season)
+}
+
+# Fit the multiple regression and return model stats
+fit_multi_regression <- function(data) {
+  model <- lm(Win_Pct ~ own_win_pct_A + avg_opp_win_pct, data = data)
+  s     <- summary(model)
+  coefs <- as.data.frame(s$coefficients)
+  coefs <- round(coefs, 4)
+  coefs$term <- rownames(coefs)
+  rownames(coefs) <- NULL
+  coefs <- coefs[, c("term", "Estimate", "Std. Error", "t value", "Pr(>|t|)")]
+  names(coefs) <- c("Term", "Estimate", "Std Error", "t", "p-value")
+
+  list(
+    model         = model,
+    r_squared     = round(s$r.squared, 4),
+    adj_r_squared = round(s$adj.r.squared, 4),
+    n_obs         = nrow(data),
+    coef_table    = coefs
+  )
+}
+
+# Actual vs Predicted scatter plot
+# Shows how well the combined model reproduces observed Win%
+plot_actual_vs_predicted <- function(data, model_stats) {
+  fitted_vals <- fitted(model_stats$model)
+
+  plot_data <- data %>%
+    mutate(predicted = round(fitted_vals, 3))
+
+  subtitle <- glue::glue(
+    "R² = {model_stats$r_squared}  |  ",
+    "Adj R² = {model_stats$adj_r_squared}  |  ",
+    "n = {model_stats$n_obs} team-seasons"
+  )
+
+  ggplot(plot_data, aes(x = predicted, y = Win_Pct)) +
+    geom_point(alpha = 0.35, color = "#1a6fb5", size = 1.8) +
+    # 45-degree reference line — perfect predictions fall on this
+    geom_abline(slope = 1, intercept = 0,
+                linetype = "dashed", color = "grey50", linewidth = 0.8) +
+    geom_smooth(method = "lm", se = TRUE,
+                color = "#e87722", fill = "#e87722", alpha = 0.15, linewidth = 1.1) +
+    scale_x_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
+    labs(
+      title    = "Actual vs Predicted Win% (A+1)",
+      subtitle = subtitle,
+      x        = "Predicted Win% — model output",
+      y        = "Actual Win%"
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(plot.subtitle = element_text(color = "grey50", size = 10))
+}
+
+# Partial regression plots — one panel per predictor
+# Shows the marginal effect of each variable after controlling for the other
+plot_partial_regression <- function(data, model_stats, predictor) {
+
+  other <- if (predictor == "own_win_pct_A") "avg_opp_win_pct" else "own_win_pct_A"
+
+  # Residuals of Y ~ other predictor
+  res_y <- residuals(lm(as.formula(paste("Win_Pct ~", other)), data = data))
+  # Residuals of focal predictor ~ other predictor
+  res_x <- residuals(lm(as.formula(paste(predictor, "~", other)), data = data))
+
+  plot_data <- data.frame(res_x = res_x, res_y = res_y)
+
+  x_label <- if (predictor == "own_win_pct_A") {
+    "Team Win% in Season A  (residualized)"
+  } else {
+    "Avg Opponent Win% from Season A  (residualized)"
+  }
+
+  ggplot(plot_data, aes(x = res_x, y = res_y)) +
+    geom_point(alpha = 0.35, color = "#1a6fb5", size = 1.8) +
+    geom_smooth(method = "lm", se = TRUE,
+                color = "#e87722", fill = "#e87722", alpha = 0.15, linewidth = 1.1) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
+    labs(
+      title = x_label,
+      x     = x_label,
+      y     = "Win%(A+1)  (residualized)"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(plot.title = element_text(size = 11))
+}
+
 # ─────────────────────────────────────────────────────────────
 # Scatter plot: pred_score vs Win_Pct with regression line
 # ─────────────────────────────────────────────────────────────

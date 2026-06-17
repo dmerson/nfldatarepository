@@ -94,8 +94,25 @@ ui <- page_navbar(
                  "SOS Adj PM = Avg PM + avg Avg PM of opponents (strength-of-schedule adjusted).",
                  "Opp Win% = combined win% of all opponents faced.")
       ),
-      # Main panel: table
-      DTOutput("alltime_table")
+      # Main panel: histograms on top, table below
+      layout_columns(
+        col_widths = 12,
+        layout_columns(
+          col_widths = c(6, 6),
+          card(
+            card_header("Distribution of Win%"),
+            plotOutput("alltime_hist_winpct", height = "260px")
+          ),
+          card(
+            card_header("Distribution of SOS Adj PM"),
+            plotOutput("alltime_hist_sospm", height = "260px")
+          )
+        ),
+        card(
+          card_header("All-Time Team Records"),
+          DTOutput("alltime_table")
+        )
+      )
     )
   ),
 
@@ -356,7 +373,30 @@ server <- function(input, output, session) {
 
   output$alltime_table <- renderDT({
     nfl_datatable(alltime_data(),
-                  caption = "All-Time Team Records (1999–2024)")
+                  caption = "All-Time Team Records (1999–2025)")
+  })
+
+  output$alltime_hist_winpct <- renderPlot({
+    data <- alltime_data()
+    req(nrow(data) > 0)
+    ggplot(data, aes(x = Win_Pct)) +
+      geom_histogram(bins = 15, fill = "#1a6fb5", color = "white", alpha = 0.85) +
+      geom_vline(xintercept = mean(data$Win_Pct, na.rm = TRUE),
+                 linetype = "dashed", color = "#e87722", linewidth = 1) +
+      scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+      labs(x = "Win%", y = "# Teams") +
+      theme_minimal(base_size = 12)
+  })
+
+  output$alltime_hist_sospm <- renderPlot({
+    data <- alltime_data()
+    req(nrow(data) > 0)
+    ggplot(data, aes(x = SOS_Adj_PM)) +
+      geom_histogram(bins = 15, fill = "#2ca02c", color = "white", alpha = 0.85) +
+      geom_vline(xintercept = mean(data$SOS_Adj_PM, na.rm = TRUE),
+                 linetype = "dashed", color = "#e87722", linewidth = 1) +
+      labs(x = "SOS Adj PM (pts/game)", y = "# Teams") +
+      theme_minimal(base_size = 12)
   })
 
   # ── Tab 2: Home Field Advantage ───────────────────────────────────────────

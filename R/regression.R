@@ -133,18 +133,19 @@ fit_regression <- function(reg_data) {
 
 # ═════════════════════════════════════════════════════════════
 # MULTIPLE REGRESSION
-# Model: Win_Pct(A+1) ~ Win_Pct(A) + Avg_Opp_Win_Pct(A+1)
+# Model: Win_Pct(A+1) ~ Win_Pct(A) + Avg_Opp_Win_Pct(A+1 schedule, using A win%)
 #
-# Predictor 1: team's own Win%(A)          — prior-year performance
-# Predictor 2: avg opponent Win%(A+1)      — actual realized schedule difficulty
-#              (opponents' win% in the SAME season A+1, not the prior year)
+# Predictor 1: team's own Win%(A)          — how good were they last year?
+# Predictor 2: avg opponent Win%(A) for    — prior-year estimate of how hard
+#              the A+1 schedule             next year's schedule will be
 # Outcome:     team's Win%(A+1)
 # ═════════════════════════════════════════════════════════════
 
 # Build the dataset for multiple regression.
 # Each row is one (team, season A+1) with three values:
 #   own_win_pct_A    — team's own Win% in season A (prior year performance)
-#   avg_opp_win_pct  — avg Win%(A+1) of every opponent faced in A+1 (realized difficulty)
+#   avg_opp_win_pct  — avg Win%(A) of every opponent on the A+1 schedule
+#                      (forward-looking schedule difficulty estimate)
 #   Win_Pct          — team's actual Win% in season A+1 (outcome)
 build_multi_regression_data <- function(team_rows,
                                         game_types = "REG",
@@ -168,19 +169,19 @@ build_multi_regression_data <- function(team_rows,
     ) %>%
     select(team, season, win_pct)
 
-  # Avg opponent Win%(A+1): for each game in season A+1, look up the opponent's
-  # Win% from that SAME season (A+1), then average across the schedule.
-  # This is the actual realized difficulty of the A+1 schedule.
+  # For each game in season A+1, look up each opponent's Win% from season A
+  # (prev_season), then average — this is the pre-season schedule difficulty estimate.
   avg_opp_winpct <- filtered %>%
     select(team, season, opponent) %>%
+    mutate(prev_season = season - 1) %>%
     left_join(
-      season_winpct %>% rename(opp_win_pct_A1 = win_pct),
-      by = c("opponent" = "team", "season" = "season")   # same season join
+      season_winpct %>% rename(opp_win_pct_A = win_pct),
+      by = c("opponent" = "team", "prev_season" = "season")
     ) %>%
     group_by(team, season) %>%
     summarise(
-      avg_opp_win_pct = mean(opp_win_pct_A1, na.rm = TRUE),
-      n_with_data     = sum(!is.na(opp_win_pct_A1)),
+      avg_opp_win_pct = mean(opp_win_pct_A, na.rm = TRUE),
+      n_with_data     = sum(!is.na(opp_win_pct_A)),
       .groups = "drop"
     ) %>%
     filter(n_with_data >= 10)
@@ -278,7 +279,7 @@ plot_partial_regression <- function(data, model_stats, predictor) {
   x_label <- if (predictor == "own_win_pct_A") {
     "Team Win% in Season A  (residualized)"
   } else {
-    "Avg Opponent Win% in Season A+1  (residualized)"
+    "Avg Opp Win%(A) for A+1 Schedule  (residualized)"
   }
 
   ggplot(plot_data, aes(x = res_x, y = res_y)) +

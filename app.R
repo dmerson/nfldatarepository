@@ -217,9 +217,9 @@ ui <- page_navbar(
           tags$br(), tags$br(),
           tags$b("Win%(A)"), "— how good was the team last season?",
           tags$br(), tags$br(),
-          tags$b("Avg Opp Win%(A+1)"), "— avg Win% of every opponent",
-          "in the same season (A+1). This is the realized schedule",
-          "difficulty, not a forecast."
+          tags$b("Avg Opp Win%(A) for A+1 schedule"), "— for each opponent",
+          "on the A+1 schedule, use their Win% from season A.",
+          "This is the pre-season estimate of how hard next year will be."
         ),
         hr(),
         season_range_ui("mreg", min_val = 2000),
@@ -262,7 +262,7 @@ ui <- page_navbar(
             plotOutput("mreg_partial_own", height = "340px")
           ),
           card(
-            card_header("Partial: Avg Opp Win%(A+1)"),
+            card_header("Partial: Avg Opp Win%(A) for A+1 Schedule"),
             plotOutput("mreg_partial_opp", height = "340px")
           )
         ),
@@ -539,7 +539,7 @@ server <- function(input, output, session) {
       rename(Abbr                  = team,
              Season                = season,
              `Team Win%(A)`        = own_win_pct_A,
-             `Avg Opp Win%(A+1)`   = avg_opp_win_pct,
+             `Avg Opp Win%(A) for A+1 Sched` = avg_opp_win_pct,
              `Win%(A+1)`           = Win_Pct)
     nfl_datatable(data, caption = "Multiple regression dataset: one row per team-season")
   })

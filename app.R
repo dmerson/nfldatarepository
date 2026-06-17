@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # NFL Data Analysis Shiny App
-# Tabs: All-Time Records | Season Breakdown | Head-to-Head | Team Detail
+# Tabs: All-Time Records | Season Breakdown | Head-to-Head | Team Detail | Regression
 #
 # To run locally:  source("install_packages.R") once, then shiny::runApp()
 # To deploy:       rsconnect::deployApp() after connecting your shinyapps.io account
@@ -17,6 +17,7 @@ library(glue)
 source("R/team_mappings.R")
 source("R/data_load.R")
 source("R/stats_calc.R")
+source("R/regression.R")
 
 # ── Load data once at startup ────────────────────────────────────────────────
 # This runs when the app starts. Uses local cache if available.
@@ -129,6 +130,67 @@ ui <- page_navbar(
         uiOutput("h2h_summary")
       ),
       DTOutput("h2h_table")
+    )
+  ),
+
+  # ── Tab 5: Regression Analysis ───────────────────────────────────────────
+  nav_panel(
+    title = "Regression",
+    layout_sidebar(
+      sidebar = sidebar(
+        helpText(
+          "Predictive score for team T in season A+1:",
+          tags$br(),
+          tags$em("Average SOS Adj PM (season A) across all of T's season A+1 opponents."),
+          tags$br(), tags$br(),
+          "Regression tests whether this forward-looking schedule difficulty",
+          "correlates with the team's actual Win% in season A+1."
+        ),
+        hr(),
+        season_range_ui("reg", min_val = 2000),  # Need at least season A and A+1
+        hr(),
+        # For this analysis, regular season makes the most sense as the base
+        checkboxGroupInput(
+          inputId  = "reg_game_types",
+          label    = "Game types used for score + Win%",
+          choices  = c("Regular season" = "REG",
+                       "Wild Card"      = "WC",
+                       "Divisional"     = "DIV",
+                       "Conf. Champ."   = "CON",
+                       "Super Bowl"     = "SB"),
+          selected = "REG",
+          inline   = TRUE
+        )
+      ),
+      layout_columns(
+        col_widths = 12,
+        # Row 1: key model stats in value boxes
+        layout_columns(
+          col_widths = c(3, 3, 3, 3),
+          value_box(title = "R²",
+                    value = textOutput("reg_r2"),
+                    theme = "primary"),
+          value_box(title = "Adj R²",
+                    value = textOutput("reg_adj_r2"),
+                    theme = "secondary"),
+          value_box(title = "Slope",
+                    value = textOutput("reg_slope"),
+                    theme = "warning"),
+          value_box(title = "p-value",
+                    value = textOutput("reg_pvalue"),
+                    theme = "success")
+        ),
+        # Row 2: scatter plot
+        card(
+          card_header("Scatter Plot: Predictive Score vs Next-Season Win%"),
+          plotOutput("reg_plot", height = "420px")
+        ),
+        # Row 3: underlying data table
+        card(
+          card_header("Regression Dataset"),
+          DTOutput("reg_table")
+        )
+      )
     )
   ),
 
@@ -303,6 +365,53 @@ server <- function(input, output, session) {
     req(nrow(data) > 0)
     team_name <- get_team_name(input$detail_team)
     nfl_datatable(data, caption = glue("{team_name} — Game Log"))
+  })
+
+  # ── Tab 5: Regression ────────────────────────────────────────────────────
+
+  # Build the regression dataset reactively whenever filters change
+  reg_data <- reactive({
+    build_regression_data(
+      team_rows,
+      game_types  = input$reg_game_types,
+      season_min  = input$reg_season_range[1],
+      season_max  = input$reg_season_range[2]
+    )
+  })
+
+  # Fit the model reactively
+  reg_model <- reactive({
+    data <- reg_data()
+    req(nrow(data) > 20)  # Need a reasonable sample size
+    fit_regression(data)
+  })
+
+  # Value box outputs
+  output$reg_r2     <- renderText({ reg_model()$r_squared })
+  output$reg_adj_r2 <- renderText({ reg_model()$adj_r_squared })
+  output$reg_slope  <- renderText({ reg_model()$coef_slope })
+  output$reg_pvalue <- renderText({
+    p <- reg_model()$p_value
+    if (p < 0.001) "< 0.001" else as.character(p)
+  })
+
+  # Scatter plot
+  output$reg_plot <- renderPlot({
+    data  <- reg_data()
+    stats <- reg_model()
+    req(nrow(data) > 0)
+    plot_regression(data, stats)
+  })
+
+  # Data table
+  output$reg_table <- renderDT({
+    data <- reg_data() %>%
+      select(Team, team, season, pred_score, n_with_data, W, L, T, Win_Pct) %>%
+      rename(Abbr = team, Season = season,
+             `Pred Score` = pred_score,
+             `Opps w/ Data` = n_with_data,
+             `Win%` = Win_Pct)
+    nfl_datatable(data, caption = "Regression Dataset: one row per team-season")
   })
 }
 

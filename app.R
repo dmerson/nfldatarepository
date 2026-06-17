@@ -20,7 +20,7 @@ source("R/stats_calc.R")
 
 # ── Load data once at startup ────────────────────────────────────────────────
 # This runs when the app starts. Uses local cache if available.
-games     <- load_nfl_games(seasons = 1999:2024)
+games     <- load_nfl_games(seasons = 1999:2025)
 team_rows <- games_to_team_rows(games)
 seasons   <- available_seasons(games)
 teams     <- available_teams(team_rows)
@@ -76,7 +76,7 @@ nfl_datatable <- function(data, ...) {
 
 # ── UI ───────────────────────────────────────────────────────────────────────
 ui <- page_navbar(
-  title = "NFL Stats (1999–2024)",
+  title = "NFL Stats (1999–2025)",
   theme = bs_theme(bootswatch = "darkly", primary = "#1a6fb5"),
 
   # ── Tab 1: All-Time Records ───────────────────────────────────────────────

@@ -9,7 +9,7 @@ source("R/team_mappings.R")
 
 # Load game schedules for all seasons and cache them locally.
 # Set use_cache = FALSE to force a fresh download (e.g., mid-season updates).
-load_nfl_games <- function(seasons = 1999:2024, use_cache = TRUE) {
+load_nfl_games <- function(seasons = 1999:2025, use_cache = TRUE) {
   cache_file <- "data/nfl_games_cache.rds"
 
   if (use_cache && file.exists(cache_file)) {

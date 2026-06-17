@@ -7,12 +7,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(shiny)
-library(bslib)   # Modern Bootstrap 5 theming
-library(DT)      # Interactive data tables
+library(bslib)    # Modern Bootstrap 5 theming
+library(DT)       # Interactive data tables
 library(dplyr)
 library(ggplot2)
 library(scales)
 library(glue)
+library(leaflet)  # Interactive maps
 
 source("R/team_mappings.R")
 source("R/data_load.R")
@@ -118,14 +119,15 @@ ui <- page_navbar(
       ),
       layout_columns(
         col_widths = 12,
-        # Sortable by HFA Win% or HFA Avg PM to rank teams
+        # Map: circle per stadium, sized by HFA Avg PM
+        card(
+          card_header("HFA Avg Point Margin by Stadium — circle size = magnitude, green = home advantage, red = road team advantage"),
+          leafletOutput("hfa_map", height = "480px")
+        ),
+        # Table ranked by HFA Win%
         card(
           card_header("Home vs Away+Neutral — sorted by HFA Win%"),
           DTOutput("hfa_winpct_table")
-        ),
-        card(
-          card_header("Home vs Away+Neutral — sorted by HFA Avg Point Margin"),
-          DTOutput("hfa_pm_table")
         )
       )
     )
@@ -367,7 +369,52 @@ server <- function(input, output, session) {
     )
   })
 
-  # Table sorted by HFA Win%
+  # Map: one circle per stadium, sized by absolute HFA Avg PM,
+  # green = positive HFA (better at home), red = negative (worse at home)
+  output$hfa_map <- renderLeaflet({
+    data <- hfa_data() %>%
+      left_join(STADIUM_COORDS, by = "team") %>%
+      filter(!is.na(lat))
+
+    # Scale radius: min 6px so every team is visible; cap at 30px
+    max_pm <- max(abs(data$HFA_Avg_PM), na.rm = TRUE)
+    data <- data %>%
+      mutate(
+        radius = pmax(6, pmin(30, abs(HFA_Avg_PM) / max_pm * 30)),
+        color  = ifelse(HFA_Avg_PM >= 0, "#2ca02c", "#d62728"),
+        popup  = glue::glue(
+          "<b>{Team}</b><br>",
+          "{stadium}<br><hr>",
+          "HFA Avg PM: <b>{sprintf('%+.2f', HFA_Avg_PM)}</b><br>",
+          "HFA Win%: <b>{sprintf('%+.3f', HFA_Win_Pct)}</b><br>",
+          "Home: {Home_W}-{Home_L}-{Home_T} ({Home_Win_Pct})<br>",
+          "Away: {Away_W}-{Away_L}-{Away_T} ({Away_Win_Pct})"
+        )
+      )
+
+    leaflet(data) %>%
+      addProviderTiles(providers$CartoDB.Positron) %>%
+      addCircleMarkers(
+        lng         = ~lon,
+        lat         = ~lat,
+        radius      = ~radius,
+        color       = ~color,
+        fillColor   = ~color,
+        fillOpacity = 0.7,
+        weight      = 1.5,
+        opacity     = 0.9,
+        popup       = ~popup,
+        label       = ~glue::glue("{Team}: {sprintf('%+.2f', HFA_Avg_PM)} pts HFA")
+      ) %>%
+      addLegend(
+        position = "bottomright",
+        colors   = c("#2ca02c", "#d62728"),
+        labels   = c("Positive HFA (better at home)", "Negative HFA (better on road)"),
+        title    = "HFA Direction"
+      )
+  })
+
+  # Table ranked by HFA Win%
   output$hfa_winpct_table <- renderDT({
     data <- hfa_data() %>%
       select(Team, team,
@@ -377,18 +424,6 @@ server <- function(input, output, session) {
       rename(Abbr = team) %>%
       arrange(desc(HFA_Win_Pct))
     nfl_datatable(data, caption = "Home Field Advantage — ranked by HFA Win%")
-  })
-
-  # Table sorted by HFA Avg PM
-  output$hfa_pm_table <- renderDT({
-    data <- hfa_data() %>%
-      select(Team, team,
-             Home_G, Home_W, Home_L, Home_T, Home_Win_Pct, Home_Avg_PM,
-             Away_G, Away_W, Away_L, Away_T, Away_Win_Pct, Away_Avg_PM,
-             Neut_G, HFA_Win_Pct, HFA_Avg_PM) %>%
-      rename(Abbr = team) %>%
-      arrange(desc(HFA_Avg_PM))
-    nfl_datatable(data, caption = "Home Field Advantage — ranked by HFA Avg Point Margin")
   })
 
   # ── Tab 3: Season Breakdown ───────────────────────────────────────────────

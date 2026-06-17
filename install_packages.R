@@ -10,7 +10,8 @@ install.packages(c(
   "ggplot2",     # Charts and visualizations
   "nflreadr",    # Pulls free NFL data from the nflverse public repo
   "scales",      # Formatting helpers (percentages, commas) used in ggplot2
-  "glue"         # String interpolation for building readable labels
+  "glue",        # String interpolation for building readable labels
+  "leaflet"      # Interactive maps with circle markers
 ))
 
 

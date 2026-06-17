@@ -138,12 +138,19 @@ ui <- page_navbar(
     title = "Regression",
     layout_sidebar(
       sidebar = sidebar(
+        radioButtons(
+          inputId  = "reg_metric",
+          label    = "Opponent quality metric (season A)",
+          choices  = c("Win%"        = "Win_Pct",
+                       "SOS Adj PM"  = "SOS_Adj_PM"),
+          selected = "Win_Pct"
+        ),
         helpText(
           "Predictive score for team T in season A+1:",
           tags$br(),
-          tags$em("Average SOS Adj PM (season A) across all of T's season A+1 opponents."),
+          tags$em("Average of each A+1 opponent's chosen metric from season A."),
           tags$br(), tags$br(),
-          "Regression tests whether this forward-looking schedule difficulty",
+          "Tests whether forward-looking schedule difficulty",
           "correlates with the team's actual Win% in season A+1."
         ),
         hr(),
@@ -373,6 +380,7 @@ server <- function(input, output, session) {
   reg_data <- reactive({
     build_regression_data(
       team_rows,
+      metric      = input$reg_metric,
       game_types  = input$reg_game_types,
       season_min  = input$reg_season_range[1],
       season_max  = input$reg_season_range[2]
@@ -400,7 +408,7 @@ server <- function(input, output, session) {
     data  <- reg_data()
     stats <- reg_model()
     req(nrow(data) > 0)
-    plot_regression(data, stats)
+    plot_regression(data, stats, input$reg_metric)
   })
 
   # Data table
